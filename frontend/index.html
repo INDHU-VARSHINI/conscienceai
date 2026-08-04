@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🧠 ConscienceAI — Ethics Auditor</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f4f4f9;
+        margin: 0;
+        padding: 0;
+        color: #333;
+    }
+    .container {
+        max-width: 900px;
+        margin: 30px auto;
+        background: #fff;
+        padding: 25px 40px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    h1, h2, h3 {
+        margin-top: 0;
+    }
+    textarea {
+        width: 100%;
+        height: 150px;
+        padding: 10px;
+        font-size: 16px;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        resize: vertical;
+    }
+    button {
+        background-color: #4CAF50;
+        color: white;
+        padding: 12px 20px;
+        margin-top: 10px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+    button:hover { background-color: #45a049; }
+    .progress-bar-container {
+        margin: 10px 0;
+        background-color: #ddd;
+        border-radius: 8px;
+        overflow: hidden;
+        height: 20px;
+    }
+    .progress-bar {
+        height: 100%;
+        text-align: right;
+        padding-right: 5px;
+        color: white;
+        font-weight: bold;
+        line-height: 20px;
+    }
+    .highlight, .source, .corrected {
+        background-color: #f9f9f9;
+        border-left: 4px solid #4CAF50;
+        padding: 10px 15px;
+        margin: 10px 0;
+        border-radius: 6px;
+    }
+    .expander {
+        margin: 5px 0;
+        cursor: pointer;
+        background-color: #eee;
+        padding: 8px 12px;
+        border-radius: 6px;
+    }
+    .expander-content {
+        display: none;
+        margin: 5px 0 10px 10px;
+        padding-left: 10px;
+    }
+    .expander.open + .expander-content { display: block; }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>🧠 ConscienceAI — Ethics Auditor</h1>
+    <p>Audit AI model outputs for bias, see exact matched phrases and suggested corrections.</p>
+    
+    <h2>📝 Input Text</h2>
+    <textarea id="inputText" placeholder="Example: Men are better at engineering than women..."></textarea>
+    <button onclick="analyzeText()">🔍 Analyze for Bias</button>
+
+    <div id="results" style="margin-top: 20px;"></div>
+</div>
+
+<script>
+const API_URL = "http://127.0.0.1:8000/analyze";
+
+async function analyzeText() {
+    const text = document.getElementById("inputText").value.trim();
+    const resultsDiv = document.getElementById("results");
+    resultsDiv.innerHTML = "";
+
+    if (!text) {
+        alert("⚠️ Please enter some text to analyze.");
+        return;
+    }
+
+    const loading = document.createElement("p");
+    loading.textContent = "🤔 Analyzing...";
+    resultsDiv.appendChild(loading);
+
+    try {
+        const resp = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text })
+        });
+
+        if (!resp.ok) {
+            resultsDiv.innerHTML = `<p style="color:red">API Error: ${resp.status}</p>`;
+            return;
+        }
+
+        const data = await resp.json();
+        resultsDiv.innerHTML = "";
+
+        // Bias Scores
+        const scoresDiv = document.createElement("div");
+        scoresDiv.innerHTML = `<h2>📊 Bias Scores</h2>`;
+        const scores = data.scores;
+        for (let cat in scores) {
+            if (cat === "overall") continue;
+            const value = scores[cat];
+            const progressWrapper = document.createElement("div");
+            progressWrapper.className = "progress-bar-container";
+            const progress = document.createElement("div");
+            progress.className = "progress-bar";
+            progress.style.width = `${(value/5)*100}%`;
+            progress.style.backgroundColor = "#4CAF50";
+            progress.textContent = `${value}/5`;
+            progressWrapper.appendChild(progress);
+            const label = document.createElement("strong");
+            label.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+            scoresDiv.appendChild(label);
+            scoresDiv.appendChild(progressWrapper);
+        }
+        resultsDiv.appendChild(scoresDiv);
+
+        // Highlights
+        const highlights = data.highlights;
+        const highlightsDiv = document.createElement("div");
+        highlightsDiv.innerHTML = `<h2>⚠️ Highlights (matched phrases & explanation)</h2>`;
+        if (highlights && Object.keys(highlights).length > 0) {
+            for (let cat in highlights) {
+                const expander = document.createElement("div");
+                expander.className = "expander";
+                expander.textContent = `${cat.charAt(0).toUpperCase() + cat.slice(1)} — explanation & matches`;
+                expander.onclick = () => expander.classList.toggle("open");
+
+                const content = document.createElement("div");
+                content.className = "expander-content";
+
+                const items = highlights[cat];
+                content.innerHTML = `<p><strong>Explanation:</strong> ${items[0]}</p>`;
+                if (items.length > 1) {
+                    let matchesHTML = "<ul>";
+                    for (let i = 1; i < items.length; i++) {
+                        matchesHTML += `<li><code>${items[i]}</code></li>`;
+                    }
+                    matchesHTML += "</ul>";
+                    content.innerHTML += `<strong>Matched phrases found:</strong>${matchesHTML}`;
+                }
+                resultsDiv.appendChild(expander);
+                resultsDiv.appendChild(content);
+            }
+        } else {
+            highlightsDiv.innerHTML += "<p>No significant biased phrases detected.</p>";
+        }
+        resultsDiv.appendChild(highlightsDiv);
+
+        // Corrected
+        const correctedDiv = document.createElement("div");
+        correctedDiv.className = "corrected";
+        correctedDiv.innerHTML = `<h2>✅ Ethically Corrected Version</h2><p>${data.corrected}</p>`;
+        resultsDiv.appendChild(correctedDiv);
+
+        // Sources
+        const sources = data.sources;
+        const sourcesDiv = document.createElement("div");
+        sourcesDiv.innerHTML = `<h2>📚 Sources / Guidance</h2>`;
+        sources.forEach((s, i) => {
+            const expander = document.createElement("div");
+            expander.className = "expander";
+            expander.textContent = `Source ${i+1}: ${s.title}`;
+            expander.onclick = () => expander.classList.toggle("open");
+            const content = document.createElement("div");
+            content.className = "expander-content";
+            content.innerHTML = `<p>${s.content}</p>`;
+            resultsDiv.appendChild(expander);
+            resultsDiv.appendChild(content);
+        });
+
+    } catch (err) {
+        resultsDiv.innerHTML = `<p style="color:red">Error: ${err}</p>`;
+    }
+}
+</script>
+</body>
+</html>
